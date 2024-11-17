@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity, Modal, Pressable, Alert } from 'react-native';
 import { supabase } from '../services/supabaseClient';
+import Icon from 'react-native-vector-icons/FontAwesome';
 
 interface ItemEstoque {
   id: string;
@@ -45,6 +46,14 @@ const TelaControleEstoque: React.FC = () => {
       console.error('Erro ao buscar itens:', error);
     }
   };
+
+  // Adicione um estado para o texto de pesquisa
+  const [searchText, setSearchText] = useState('');
+
+  // Modifique a função de renderização dos itens para incluir filtragem
+  const itensFiltrados = itens.filter(item =>
+  item.produtos.toLowerCase().includes(searchText.toLowerCase())
+  );
 
   const adicionarItem = () => {
     setModalAdicionarVisivel(true);
@@ -139,15 +148,21 @@ const TelaControleEstoque: React.FC = () => {
 
   const renderizarItem = (item: ItemEstoque) => (
     <View key={item.id} style={estilos.containerItem}>
-      <Text style={estilos.itemTexto}>{item.produtos}</Text>
-      <Text style={estilos.itemTexto}>{item.valor}</Text>
-      <Text style={estilos.itemTexto}>{item.quantidade}</Text>
+      <View style={[estilos.column, { flex: 2, alignItems: 'flex-start' }]}>
+        <Text style={estilos.nomeItem}>{item.produtos}</Text>
+      </View>
+      <View style={[estilos.column, { flex: 1}]}>
+        <Text style={estilos.valorTexto}>{`${item.valor} R$`}</Text>
+      </View>
+      <View style={[estilos.column, { flex: 2.5}]}>
+        <Text style={estilos.quantidadeTexto}>{item.quantidade}</Text>
+      </View>
       <View style={estilos.acoes}>
         <TouchableOpacity onPress={() => editarItem(item)}>
-          <Text style={estilos.acaoBotao}>~</Text>
+          <Icon name="pencil" size={18} color="#666" />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => excluirItem(item.id)}>
-          <Text style={estilos.acaoBotao}>x</Text>
+          <Icon name="trash" size={18} color="#666" />
         </TouchableOpacity>
       </View>
     </View>
@@ -155,17 +170,27 @@ const TelaControleEstoque: React.FC = () => {
 
   return (
     <View style={estilos.container}>
-      <View style={estilos.containerTotal}>
-        <Text style={estilos.labelTotal}>Total de itens:</Text>
-        <Text style={estilos.inputTotal}>{totalItens}</Text>
+      <View style={estilos.header}>
+        <Text style={estilos.titulo}>Controle de Estoque</Text>
+        <Text style={estilos.subtitulo}>Mimos e Crochê</Text>
       </View>
-      <View style={estilos.containerSelecao}>
-        <Pressable style={estilos.pickerSimulado} onPress={() => setModalVisivel(true)}>
-          <Text>{itemSelecionado}</Text>
-        </Pressable>
-        <TouchableOpacity style={estilos.botaoAdicionar} onPress={adicionarItem}>
-          <Text style={estilos.textoBotaoAdicionar}>adicionar</Text>
+      <View style={estilos.totalContainer}>
+        <Text style={estilos.totalText}>Total de items: {totalItens}</Text>
+        <TouchableOpacity style={estilos.addButton} onPress={adicionarItem}>
+          <Text style={estilos.addButtonText}>Adicionar</Text>
         </TouchableOpacity>
+      </View>
+      <View style={estilos.searchContainer}>
+        <Text style={estilos.searchLabel}>Pesquise aqui:</Text>
+        <View style={estilos.searchInputContainer}>
+          <TextInput
+            style={estilos.searchInput}
+            placeholder="Pesquise aqui"
+            value={searchText}
+            onChangeText={setSearchText}
+            placeholderTextColor="#000"
+          />
+        </View>
       </View>
       <View style={estilos.cabecalhoTabela}>
         <Text style={estilos.cabecalhoTexto}>item</Text>
@@ -174,7 +199,7 @@ const TelaControleEstoque: React.FC = () => {
         <Text style={estilos.cabecalhoTexto}>editar/excluir</Text>
       </View>
       <ScrollView>
-        {itens.map(renderizarItem)}
+        {itensFiltrados.map(renderizarItem)}
       </ScrollView>
 
       <Modal
@@ -300,6 +325,66 @@ const TelaControleEstoque: React.FC = () => {
 };
 
 const estilos = StyleSheet.create({
+  header: {
+    alignItems: 'center',
+    marginVertical: 10,
+  },
+  titulo: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  subtitulo: {
+    color: 'white',
+    fontSize: 18,
+    marginTop: 5,
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginVertical: 15,
+  },
+  totalText: {
+    color: 'white',
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    fontSize: 16,
+  },
+  addButton: {
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 16,
+  },
+  searchContainer: {
+    backgroundColor: '#1E1E1E',
+    padding: 8,
+    borderRadius: 4,
+    marginBottom: 10,
+   },
+   searchLabel: {
+    color: 'white',
+    fontSize: 14,
+    marginBottom: 4,
+   },
+   searchInputContainer: {
+    backgroundColor: 'white',
+    borderRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 10,
+   },
+   searchInput: {
+    flex: 1,
+    padding: 8,
+    fontSize: 16,
+   },
   container: {
     flex: 1,
     backgroundColor: '#1E1E1E',
@@ -307,13 +392,14 @@ const estilos = StyleSheet.create({
   },
   containerTotal: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 20,
+    marginVertical: 10,
   },
   labelTotal: {
     color: 'white',
-    fontSize: 18,
-    marginRight: 8,
+    fontSize: 16,
   },
   inputTotal: {
     backgroundColor: 'white',
@@ -327,11 +413,12 @@ const estilos = StyleSheet.create({
     marginBottom: 16,
   },
   pickerSimulado: {
-    flex: 1,
     backgroundColor: 'white',
-    marginRight: 8,
-    padding: 10,
-    justifyContent: 'center',
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   botaoAdicionar: {
     backgroundColor: 'white',
@@ -353,22 +440,47 @@ const estilos = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
   },
+  itemColumn: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   containerItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     backgroundColor: 'white',
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 4,
+    borderRadius: 8,
+    padding: 8,
+    marginVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  column: {
+    flex: 2.5,
   },
   itemTexto: {
-    flex: 1,
+    textAlign: 'center', // Centraliza valores e quantidades
+    color: '#333',
+  },
+  nomeItem: {
+    textAlign: 'left',
+    fontSize: 16,
+    color: '#333',
+  },
+  valorTexto: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  quantidadeTexto: {
+    fontSize: 16,
+    color: '#333',
     textAlign: 'center',
   },
   acoes: {
     flexDirection: 'row',
+    width: 70,
     justifyContent: 'space-around',
-    flex: 1,
+  },
+  acaoButton: {
+    padding: 5,
   },
   acaoBotao: {
     fontSize: 18,
@@ -378,11 +490,13 @@ const estilos = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 16, // Adiciona padding nas laterais
   },
   modalView: {
     backgroundColor: 'white',
     borderRadius: 20,
     padding: 35,
+    width: '100%', // Faz o modal ocupar 100% da largura disponível
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: {
@@ -407,14 +521,14 @@ const estilos = StyleSheet.create({
     borderRadius: 5,
     padding: 10,
     marginBottom: 10,
-    width: '100%',
+    width: '100%', // Garante que os inputs também ocupem toda a largura
   },
   botaoSalvar: {
     backgroundColor: '#4CAF50',
     padding: 10,
     borderRadius: 5,
     marginTop: 10,
-    width: '100%',
+    width: '100%', // Garante que o botão ocupe toda a largura
     alignItems: 'center',
   },
   textoBotaoSalvar: {
@@ -426,7 +540,7 @@ const estilos = StyleSheet.create({
     padding: 10,
     borderRadius: 5,
     marginTop: 10,
-    width: '100%',
+    width: '100%', // Garante que o botão ocupe toda a largura
     alignItems: 'center',
   },
   textoBotaoCancelar: {
