@@ -10,6 +10,12 @@ interface ItemEstoque {
   quantidade: number;
 }
 
+interface Venda {
+  produto: string;
+  valor: number;
+  quantidadeVendida: number;
+}
+
 const TelaControleEstoque: React.FC = () => {
   const [totalItens, setTotalItens] = useState<number>(0);
   const [itemSelecionado, setItemSelecionado] = useState<string>('Todos');
@@ -23,6 +29,14 @@ const TelaControleEstoque: React.FC = () => {
   const [itemParaExcluir, setItemParaExcluir] = useState<string | null>(null);
   const [modalEditarVisivel, setModalEditarVisivel] = useState<boolean>(false);
   const [itemParaEditar, setItemParaEditar] = useState<ItemEstoque | null>(null);
+  const [modalVendasVisivel, setModalVendasVisivel] = useState<boolean>(false);
+  const [vendasDoDia, setVendasDoDia] = useState<Venda[]>([]);
+  const [modalVendasTotaisVisivel, setModalVendasTotaisVisivel] = useState(false);
+  const [diasComVendas, setDiasComVendas] = useState<any[]>([]);
+  const [vendasDoDiaSelecionado, setVendasDoDiaSelecionado] = useState<Venda[]>([]);
+  const [modalDetalhesDiaVisivel, setModalDetalhesDiaVisivel] = useState(false);
+  const [vendasDiaSelecionado, setVendasDiaSelecionado] = useState<Venda[]>([]);
+  const [dataSelecionada, setDataSelecionada] = useState('');
 
   const opcoesItens = ['Todos', 'Agulha', 'Linha', 'Tesoura'];
 
@@ -45,6 +59,126 @@ const TelaControleEstoque: React.FC = () => {
     } catch (error) {
       console.error('Erro ao buscar itens:', error);
     }
+  };
+
+  const registrarVenda = async (item: ItemEstoque) => {
+    const quantidadeVendida = 1; // Sempre vendendo 1 unidade por exemplo
+    if (item.quantidade <= 0) {
+      Alert.alert('Erro', 'Quantidade insuficiente em estoque.');
+      return;
+    }
+
+    try {
+      // Atualiza o estoque
+      const novaQuantidade = item.quantidade - quantidadeVendida;
+      const { error } = await supabase
+        .from('Stock')
+        .update({ quantidade: novaQuantidade })
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      // Adiciona a venda ao histórico do dia
+      setVendasDoDia((prevVendas) => {
+        const vendaExistente = prevVendas.find(
+          (venda) => venda.produto === item.produtos
+        );
+
+        if (vendaExistente) {
+          return prevVendas.map((venda) =>
+            venda.produto === item.produtos
+              ? { ...venda, quantidadeVendida: venda.quantidadeVendida + 1 }
+              : venda
+          );
+        } else {
+          return [
+            ...prevVendas,
+            { produto: item.produtos, valor: item.valor, quantidadeVendida: 1 },
+          ];
+        }
+      });
+
+      Alert.alert('Sucesso', `Venda registrada: ${item.produtos}`);
+      buscarItens();
+    } catch (error) {
+      console.error('Erro ao registrar venda:', error);
+      Alert.alert('Erro', 'Não foi possível registrar a venda.');
+    }
+  };
+
+  const abrirModalVendas = () => {
+    setModalVendasVisivel(true);
+  };
+
+  const fecharModalVendas = () => {
+    setModalVendasVisivel(false);
+  };
+
+  const salvarDia = async () => {
+    if (vendasDoDia.length === 0) {
+      Alert.alert('Aviso', 'Não há vendas para salvar.');
+      return;
+    }
+  
+    try {
+      // Enviar vendas para a tabela do banco de dados
+      const { error } = await supabase.from('DailySales').insert(vendasDoDia);
+  
+      if (error) throw error;
+  
+      // Limpar os dados das vendas do dia
+      setVendasDoDia([]);
+      Alert.alert('Sucesso', 'Vendas do dia salvas com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar vendas do dia:', error);
+      Alert.alert('Erro', 'Não foi possível salvar as vendas do dia.');
+    }
+  };
+
+  const abrirModalVendasTotais = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('DailySales')
+        .select('produto, valor, quantidadeVendida, created_at');
+  
+      if (error) throw error;
+  
+      // Agrupar vendas por dia
+      const agrupadoPorDia = data.reduce((acumulador: any, venda: any) => {
+        const dia = new Date(venda.created_at).toLocaleDateString();
+        if (!acumulador[dia]) {
+          acumulador[dia] = { data: dia, vendas: [], quantidadeTotal: 0 };
+        }
+        acumulador[dia].vendas.push(venda);
+        acumulador[dia].quantidadeTotal += venda.quantidadeVendida;
+        return acumulador;
+      }, {});
+  
+      setDiasComVendas(Object.values(agrupadoPorDia));
+      setModalVendasTotaisVisivel(true);
+    } catch (error) {
+      console.error('Erro ao buscar vendas totais:', error);
+      Alert.alert('Erro', 'Não foi possível carregar as vendas totais.');
+    }
+  };
+  
+  const fecharModalVendasTotais = () => {
+    setModalVendasTotaisVisivel(false);
+    setVendasDoDiaSelecionado([]);
+  };
+  
+  const selecionarDia = (dia: string) => {
+    const vendas = diasComVendas.find((d) => d.data === dia)?.vendas || [];
+    setVendasDiaSelecionado(vendas);
+    setDataSelecionada(dia);
+    setModalVendasTotaisVisivel(false);
+    setModalDetalhesDiaVisivel(true);
+  };
+
+  const fecharModalDetalhesDia = () => {
+    setModalDetalhesDiaVisivel(false);
+    setVendasDiaSelecionado([]);
+    setDataSelecionada('');
   };
 
   // Adicione um estado para o texto de pesquisa
@@ -161,10 +295,21 @@ const TelaControleEstoque: React.FC = () => {
         <TouchableOpacity onPress={() => editarItem(item)}>
           <Icon name="pencil" size={18} color="#666" />
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => registrarVenda(item)}>
+          <Icon name="shopping-cart" size={20} color="#4CAF50" />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => excluirItem(item.id)}>
           <Icon name="trash" size={18} color="#666" />
         </TouchableOpacity>
       </View>
+    </View>
+  );
+
+  const renderizarVenda = (venda: Venda, index: number) => (
+    <View key={index} style={estilos.containerItem}>
+      <Text style={estilos.dadosItem}>{venda.produto}</Text>
+      <Text style={estilos.dadosItem}>{`${venda.valor} R$`}</Text>
+      <Text style={estilos.dadosItem}>{venda.quantidadeVendida}</Text>
     </View>
   );
 
@@ -178,6 +323,14 @@ const TelaControleEstoque: React.FC = () => {
         <Text style={estilos.totalText}>Total de items: {totalItens}</Text>
         <TouchableOpacity style={estilos.addButton} onPress={adicionarItem}>
           <Text style={estilos.addButtonText}>Adicionar</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={estilos.totalContainer}>
+        <TouchableOpacity style={estilos.addButton2} onPress={abrirModalVendas}>
+          <Text style={estilos.addButtonText}>Vendas do Dia</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={estilos.addButton3} onPress={abrirModalVendasTotais}>
+          <Text style={estilos.addButtonText}>Vendas</Text>
         </TouchableOpacity>
       </View>
       <View style={estilos.searchContainer}>
@@ -222,6 +375,135 @@ const TelaControleEstoque: React.FC = () => {
                 <Text style={estilos.textoOpcao}>{item}</Text>
               </Pressable>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVendasVisivel}
+          onRequestClose={fecharModalVendas}
+      >
+        <View style={estilos.centeredView}>
+          <View style={estilos.modalView}>
+            <Text style={estilos.modalTitle}>Vendas do Dia</Text>
+
+            {/* Cabeçalhos */}
+            <View style={estilos.headerRow}>
+              <Text style={estilos.headerItem}>Item</Text>
+              <Text style={estilos.headerItem}>Valor</Text>
+              <Text style={estilos.headerItem}>Quantidade</Text>
+            </View>
+
+            {/* Lista de vendas */}
+            {vendasDoDia.length > 0 ? (
+              vendasDoDia.map(renderizarVenda)
+            ) : (
+              <Text style={{ color: 'black', textAlign: 'center', marginVertical: 10 }}>
+                Nenhuma venda registrada hoje.
+              </Text>
+            )}
+
+            {/* Botão de fechar */}
+            <TouchableOpacity
+              style={estilos.botaoSalvar}
+              onPress={salvarDia}
+            >
+              <Text style={estilos.textoBotaoSalvar}>Salvar Dia</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={estilos.botaoCancelar}
+              onPress={fecharModalVendas}
+            >
+              <Text style={estilos.textoBotaoCancelar}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVendasTotaisVisivel}
+        onRequestClose={fecharModalVendasTotais}
+      >
+        <View style={estilos.centeredView}>
+          <View style={estilos.modalView}>
+            <Text style={estilos.modalTitle}>Vendas Totais</Text>
+
+            {/* Lista de Dias com Vendas */}
+            {diasComVendas.length > 0 ? (
+              diasComVendas.map((dia, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={estilos.itemDia}
+                  onPress={() => selecionarDia(dia.data)}
+                >
+                  <Text style={estilos.textoDia}>
+                    {`Dia ${dia.data}: ${dia.quantidadeTotal} vendas`}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ color: 'black', textAlign: 'center', marginVertical: 10 }}>
+                Nenhuma venda registrada.
+              </Text>
+            )}
+
+            {/* Botão Fechar */}
+            <TouchableOpacity
+              style={estilos.botaoCancelar}
+              onPress={fecharModalVendasTotais}
+            >
+              <Text style={estilos.textoBotaoCancelar}>Fechar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalDetalhesDiaVisivel}
+        onRequestClose={fecharModalDetalhesDia}
+      >
+        <View style={estilos.centeredView}>
+          <View style={estilos.modalView}>
+            <Text style={estilos.modalTitle}>Vendas do dia {dataSelecionada}</Text>
+
+            <View style={estilos.headerRow}>
+              <Text style={estilos.headerItem}>Item</Text>
+              <Text style={estilos.headerItem}>Valor</Text>
+              <Text style={estilos.headerItem}>Quantidade</Text>
+            </View>
+
+            <ScrollView style={estilos.scrollViewVendas}>
+              {vendasDiaSelecionado.map((venda, index) => (
+                <View key={index} style={estilos.itemVenda}>
+                  <Text style={estilos.dadosItem}>{venda.produto}</Text>
+                  <Text style={estilos.dadosItem}>{`${venda.valor} R$`}</Text>
+                  <Text style={estilos.dadosItem}>{venda.quantidadeVendida}</Text>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Resumo das vendas */}
+            <View style={estilos.resumoVendas}>
+              <Text style={estilos.textoResumo}>
+                Total de itens: {vendasDiaSelecionado.reduce((acc, venda) => acc + venda.quantidadeVendida, 0)}
+              </Text>
+              <Text style={estilos.textoResumo}>
+                Valor total: R$ {vendasDiaSelecionado.reduce((acc, venda) => acc + (venda.valor * venda.quantidadeVendida), 0).toFixed(2)}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={estilos.botaoCancelar}
+              onPress={fecharModalDetalhesDia}
+            >
+              <Text style={estilos.textoBotaoCancelar}>Fechar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -358,6 +640,24 @@ const estilos = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 20,
   },
+  addButton2: {
+    backgroundColor: '#333',
+    padding: 10,
+    width: 160,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    textAlign: 'center',
+    alignItems: 'center'
+  },
+  addButton3: {
+    backgroundColor: '#333',
+    padding: 10,
+    width: 110,
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    textAlign: 'center',
+    alignItems: 'center'
+  },
   addButtonText: {
     color: 'white',
     fontSize: 16,
@@ -477,7 +777,7 @@ const estilos = StyleSheet.create({
   acoes: {
     flexDirection: 'row',
     width: 70,
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
   },
   acaoButton: {
     padding: 5,
@@ -562,6 +862,64 @@ const estilos = StyleSheet.create({
   },
   textoBotaoConfirmar: {
     color: 'white',
+    fontWeight: 'bold',
+  },
+  modalTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold',
+    marginBottom: 10
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    paddingBottom: 5,
+  },
+  headerItem: {
+    flex: 1,
+    textAlign: 'center',
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  dadosItem: {
+    flex: 1,
+    textAlign: 'center',
+    color: '#333',
+  },
+  itemDia: {
+    padding: 10,
+    marginVertical: 5,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 5,
+  },
+  textoDia: {
+    color: 'black',
+    fontWeight: 'bold',
+  },
+  scrollViewVendas: {
+    maxHeight: 300,
+    width: '100%',
+  },
+  itemVenda: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  resumoVendas: {
+    marginTop: 15,
+    padding: 10,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 5,
+    width: '100%',
+  },
+  textoResumo: {
+    fontSize: 16,
+    color: '#333',
+    marginVertical: 2,
     fontWeight: 'bold',
   },
 });
